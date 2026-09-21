@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <title>Komunitný Kalendár</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 400px; margin: auto; }
+    input, button { display: block; width: 100%; margin-bottom: 10px; padding: 8px; }
+  </style>
+</head>
+<body>
+
+  <h1>Náš Kalendár</h1>
+  <p id="status">Stav: Neprihlásený</p>
+
+  <input type="email" id="email" placeholder="Tvoj E-mail">
+  <input type="password" id="password" placeholder="Heslo (min. 6 znakov)">
+  
+  <button id="loginBtn">Prihlásiť sa</button>
+  <button id="registerBtn">Zaregistrovať nový účet</button>
+  <button id="logoutBtn" style="display:none;">Odhlásiť sa</button>
+
+  <!-- Firebase knižnice načítané priamo do prehliadača -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+
+    // TÚTO ČASŤ NAHRAĎ SVOJÍM KÓDOM Z FIREBASE (Krok 3)
+    const firebaseConfig = {
+  apiKey: "AIzaSyAW1Fo3qiyJit9xUVKj4NxIF7YminZsncU",
+  authDomain: "kalendar-edf3f.firebaseapp.com",
+  projectId: "kalendar-edf3f",
+  storageBucket: "kalendar-edf3f.firebasestorage.app",
+  messagingSenderId: "604130457317",
+  appId: "1:604130457317:web:6b17da98599d36c9bd860c"
+};
+
+
+    // Inicializácia Firebase a Autentifikácie
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    // HTML Elementy
+    const emailInput = document.getElementById('email');
+    const passInput = document.getElementById('password');
+    const loginBtn = document.getElementById('loginBtn');
+    const registerBtn = document.getElementById('registerBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const statusText = document.getElementById('status');
+
+    // Registrácia
+    registerBtn.addEventListener('click', () => {
+      createUserWithEmailAndPassword(auth, emailInput.value, passInput.value)
+        .then(() => alert("Účet bol úspešne vytvorený!"))
+        .catch(error => alert("Chyba: " + error.message));
+    });
+
+    // Prihlásenie
+    loginBtn.addEventListener('click', () => {
+      signInWithEmailAndPassword(auth, emailInput.value, passInput.value)
+        .catch(error => alert("Chyba: " + error.message));
+    });
+
+    // Odhlásenie
+    logoutBtn.addEventListener('click', () => {
+      signOut(auth);
+    });
+
+    // Sledovanie zmeny stavu (či je niekto prihlásený)
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        statusText.innerText = "Stav: Prihlásený ako " + user.email;
+        loginBtn.style.display = "none";
+        registerBtn.style.display = "none";
+        emailInput.style.display = "none";
+        passInput.style.display = "none";
+        logoutBtn.style.display = "block";
+      } else {
+        statusText.innerText = "Stav: Neprihlásený";
+        loginBtn.style.display = "block";
+        registerBtn.style.display = "block";
+        emailInput.style.display = "block";
+        passInput.style.display = "block";
+        logoutBtn.style.display = "none";
+      }
+    });
+  </script>
+</body>
+</html>
