@@ -1,2 +1,2 @@
 # JaZak01.github.io
-kalendar pre zbor
+# TODO posun login a tvorbu eventu, oprav rozdiel medzi login a registracia, a pridat username, nech nevidno email
