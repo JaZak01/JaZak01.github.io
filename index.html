@@ -6,6 +6,7 @@
   <style>
     body { font-family: sans-serif; padding: 20px; max-width: 400px; margin: auto; }
     input, button { display: block; width: 100%; margin-bottom: 10px; padding: 8px; }
+    #eventForm { background: #f0f0f0; padding: 15px; border-radius: 8px; margin-top: 20px; }
   </style>
 </head>
 <body>
@@ -13,75 +14,105 @@
   <h1>Náš Kalendár</h1>
   <p id="status">Stav: Neprihlásený</p>
 
-  <input type="email" id="email" placeholder="Tvoj E-mail">
-  <input type="password" id="password" placeholder="Heslo (min. 6 znakov)">
+  <!-- Prihlasovacia časť -->
+  <div id="authSection">
+    <input type="email" id="email" placeholder="Tvoj E-mail">
+    <input type="password" id="password" placeholder="Heslo (min. 6 znakov)">
+    <button id="loginBtn">Prihlásiť sa</button>
+    <button id="registerBtn">Zaregistrovať nový účet</button>
+  </div>
   
-  <button id="loginBtn">Prihlásiť sa</button>
-  <button id="registerBtn">Zaregistrovať nový účet</button>
   <button id="logoutBtn" style="display:none;">Odhlásiť sa</button>
 
-  <!-- Firebase knižnice načítané priamo do prehliadača -->
+  <!-- Časť na pridanie udalosti (skrytá pre neprihlásených) -->
+  <div id="eventForm" style="display:none;">
+    <h3>Pridať novú udalosť</h3>
+    <input type="text" id="eventName" placeholder="Názov udalosti (napr. Zraz komunity)">
+    <input type="date" id="eventDate">
+    <button id="addEventBtn">Uložiť do kalendára</button>
+  </div>
+
   <script type="module">
+    // 1. Importy - pridali sme funkcie pre Firestore databázu
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
     import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+    import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-    // TÚTO ČASŤ NAHRAĎ SVOJÍM KÓDOM Z FIREBASE (Krok 3)
+    // 2. TVOJ CONFIG - SEM VLOŽ SVOJE ÚDAJE Z FIREBASE!
     const firebaseConfig = {
-  apiKey: "AIzaSyAW1Fo3qiyJit9xUVKj4NxIF7YminZsncU",
-  authDomain: "kalendar-edf3f.firebaseapp.com",
-  projectId: "kalendar-edf3f",
-  storageBucket: "kalendar-edf3f.firebasestorage.app",
-  messagingSenderId: "604130457317",
-  appId: "1:604130457317:web:6b17da98599d36c9bd860c"
-};
+    apiKey: "AIzaSyAW1Fo3qiyJit9xUVKj4NxIF7YminZsncU",
+    authDomain: "kalendar-edf3f.firebaseapp.com",
+    projectId: "kalendar-edf3f",
+    storageBucket: "kalendar-edf3f.firebasestorage.app",
+    messagingSenderId: "604130457317",
+    appId: "1:604130457317:web:6b17da98599d36c9bd860c"
+    };
 
-
-    // Inicializácia Firebase a Autentifikácie
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
+    const db = getFirestore(app); // Inicializácia databázy
 
-    // HTML Elementy
-    const emailInput = document.getElementById('email');
-    const passInput = document.getElementById('password');
-    const loginBtn = document.getElementById('loginBtn');
-    const registerBtn = document.getElementById('registerBtn');
+    // UI Elementy
+    const authSection = document.getElementById('authSection');
+    const eventForm = document.getElementById('eventForm');
     const logoutBtn = document.getElementById('logoutBtn');
     const statusText = document.getElementById('status');
+    const addEventBtn = document.getElementById('addEventBtn');
 
-    // Registrácia
-    registerBtn.addEventListener('click', () => {
-      createUserWithEmailAndPassword(auth, emailInput.value, passInput.value)
-        .then(() => alert("Účet bol úspešne vytvorený!"))
+    // Autentifikácia (ponechaná z minula)
+    document.getElementById('registerBtn').addEventListener('click', () => {
+      createUserWithEmailAndPassword(auth, document.getElementById('email').value, document.getElementById('password').value)
         .catch(error => alert("Chyba: " + error.message));
     });
-
-    // Prihlásenie
-    loginBtn.addEventListener('click', () => {
-      signInWithEmailAndPassword(auth, emailInput.value, passInput.value)
+    document.getElementById('loginBtn').addEventListener('click', () => {
+      signInWithEmailAndPassword(auth, document.getElementById('email').value, document.getElementById('password').value)
         .catch(error => alert("Chyba: " + error.message));
     });
+    logoutBtn.addEventListener('click', () => signOut(auth));
 
-    // Odhlásenie
-    logoutBtn.addEventListener('click', () => {
-      signOut(auth);
-    });
-
-    // Sledovanie zmeny stavu (či je niekto prihlásený)
+    // Sledovanie prihlásenia - teraz aj skrýva/zobrazuje formulár na udalosti
     onAuthStateChanged(auth, (user) => {
       if (user) {
-        statusText.innerText = "Stav: Prihlásený ako " + user.email;
-        loginBtn.style.display = "none";
-        registerBtn.style.display = "none";
-        emailInput.style.display = "none";
-        passInput.style.display = "none";
+        statusText.innerText = "Prihlásený ako: " + user.email;
+        authSection.style.display = "none";
         logoutBtn.style.display = "block";
+        eventForm.style.display = "block"; // Zobrazí formulár pre udalosť
       } else {
         statusText.innerText = "Stav: Neprihlásený";
-        loginBtn.style.display = "block";
-        registerBtn.style.display = "block";
-        emailInput.style.display = "block";
-        passInput.style.display = "block";
+        authSection.style.display = "block";
         logoutBtn.style.display = "none";
+        eventForm.style.display = "none"; // Skryje formulár pre udalosť
+      }
+    });
+
+    // 3. PRIDÁVANIE UDALOSTÍ DO DATABÁZY
+    addEventBtn.addEventListener('click', async () => {
+      const nameInput = document.getElementById('eventName').value;
+      const dateInput = document.getElementById('eventDate').value;
+      const currentUser = auth.currentUser;
+
+      if (!nameInput || !dateInput) {
+        alert("Prosím, vyplň názov aj dátum udalosti.");
+        return;
+      }
+
+      try {
+        // Zápis do kolekcie "udalosti"
+        await addDoc(collection(db, "udalosti"), {
+          nazov: nameInput,
+          datum: dateInput,
+          autor_email: currentUser.email, // Uložíme si, kto to pridal
+          cas_pridania: new Date()
+        });
+        
+        alert("Udalosť bola úspešne pridaná do databázy!");
+        
+        // Vyčistenie formulára po pridaní
+        document.getElementById('eventName').value = "";
+        document.getElementById('eventDate').value = "";
+        
+      } catch (error) {
+        alert("Chyba pri ukladaní: " + error.message);
       }
     });
   </script>
