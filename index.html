@@ -52,7 +52,7 @@
     // Importy - pridali sme funkciu onSnapshot na čítanie v reálnom čase
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
     import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
-    import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
     // 🔴 TÚTO ČASŤ NAHRAĎ SVOJÍM KÓDOM Z FIREBASE!
     const firebaseConfig = {
@@ -84,17 +84,30 @@
       buttonText: { today: 'Dnes' },
       
       // Čo sa stane po kliknutí na udalosť v kalendári
-      eventClick: function(info) {
-        // Získame dáta, ktoré sme si schovali do "extendedProps"
+      eventClick: async function(info) {
+        const eventId = info.event.id; // Získame ID dokumentu z databázy
         const popis = info.event.extendedProps.popis || "Bez popisu";
         const autor = info.event.extendedProps.autor || "Neznámy autor";
-        
-        // Zobrazíme jednoduché vyskakovacie okno (Alert) s detailmi
-        alert(
-          `📅 ${info.event.title}\n` +
-          `\n📝 Popis:\n${popis}\n` +
-          `\n👤 Pridal: ${autor}`
-        );
+        const currentUser = auth.currentUser;
+
+        // Základná správa
+        let sprava = `📅 ${info.event.title}\n\n📝 Popis:\n${popis}\n\n👤 Pridal: ${autor}`;
+
+        // Kontrola, či je niekto prihlásený a či sa jeho e-mail zhoduje s autorom
+        if (currentUser && currentUser.email === autor) {
+          // Zobrazíme dialóg s možnosťou výberu (OK = zmazať, Zrušiť = nič)
+          if (confirm(sprava + "\n\n⚠️ Si autorom tejto udalosti. Chceš ju ZMAZAŤ?")) {
+            try {
+              // Zmazanie konkrétneho dokumentu z kolekcie "udalosti"
+              await deleteDoc(doc(db, "udalosti", eventId));
+            } catch (error) {
+              alert("Chyba pri mazaní: " + error.message);
+            }
+          }
+        } else {
+          // Ak to nie je autor (alebo je odhlásený), zobrazíme len text
+          alert(sprava);
+        }
       }
     });
     calendar.render();
