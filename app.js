@@ -64,20 +64,22 @@ allDayCb.addEventListener('change', () => {
 
 // --- Kalendár ---
 const calendarEl = document.getElementById('calendar');
+const isMobile = () => window.innerWidth < 576;
+
+const toolbarFor = () => isMobile()
+    ? { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listMonth' }
+    : { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listMonth' };
+
 const calendar = new FullCalendar.Calendar(calendarEl, {
   initialView: 'dayGridMonth',
   locale: 'sk',
   firstDay: 1,
   height: 'auto',
-  buttonText: { today: 'Dnes' },
+  buttonText: { today: 'Dnes', month: 'Mesiac', week: 'Týždeň', list: 'Zoznam' },
   displayEventEnd: true,
   eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
-  headerToolbar: {
-    left: 'prev,next today',
-    center: 'title',
-    right: 'dayGridMonth,timeGridWeek,listMonth'
-  },
-
+  headerToolbar: toolbarFor(),
+  windowResize: () => calendar.setOption('headerToolbar', toolbarFor()),
   eventClick: function (info) {
     openEventModal(info.event);
   }
