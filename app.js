@@ -35,6 +35,11 @@ const modalDesc = document.getElementById('modalDesc');
 const modalAuthor = document.getElementById('modalAuthor');
 const modalDeleteBtn = document.getElementById('modalDeleteBtn');
 
+// Polia formulára pre čas
+const allDayCb = document.getElementById('allDay');
+const startInput = document.getElementById('eventStart');
+const endInput = document.getElementById('eventEnd');
+
 // Bootstrap modal instance
 const eventModalEl = document.getElementById('eventModal');
 const eventModal = new bootstrap.Modal(eventModalEl);
@@ -45,6 +50,18 @@ const norm = (email) => (email || "").trim().toLowerCase();
 
 let currentEventId = null;
 
+// --- Prepínač "Celý deň" ---
+allDayCb.addEventListener('change', () => {
+  // pri zmene typu inputu sa hodnota vymaže, preto si zachováme dátumovú časť
+  const s = startInput.value.slice(0, 10);
+  const e = endInput.value.slice(0, 10);
+  const type = allDayCb.checked ? 'date' : 'datetime-local';
+  startInput.type = type;
+  endInput.type = type;
+  startInput.value = allDayCb.checked ? s : (s ? s + "T09:00" : "");
+  endInput.value = allDayCb.checked ? e : (e ? e + "T10:00" : "");
+});
+
 // --- Kalendár ---
 const calendarEl = document.getElementById('calendar');
 const calendar = new FullCalendar.Calendar(calendarEl, {
@@ -53,6 +70,13 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
   firstDay: 1,
   height: 'auto',
   buttonText: { today: 'Dnes' },
+  displayEventEnd: true,
+  eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+  headerToolbar: {
+    left: 'prev,next today',
+    center: 'title',
+    right: 'dayGridMonth,timeGridWeek,listMonth'
+  },
 
   eventClick: function (info) {
     openEventModal(info.event);
@@ -60,10 +84,35 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
 });
 calendar.render();
 
+function formatRange(event) {
+  const dateOpts = { day: '2-digit', month: '2-digit', year: 'numeric' };
+  const timeOpts = { hour: '2-digit', minute: '2-digit', hour12: false };
+  const fmtDate = (d) => d.toLocaleDateString('sk-SK', dateOpts);
+  const fmtTime = (d) => d.toLocaleTimeString('sk-SK', timeOpts);
+
+  const start = event.start;
+  const end = event.end;
+
+  if (event.allDay) {
+    if (!end) return fmtDate(start);
+    // FullCalendar má pri celodenných udalostiach koniec exkluzívny (+1 deň)
+    const lastDay = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1);
+    return lastDay.toDateString() === start.toDateString()
+        ? fmtDate(start)
+        : `${fmtDate(start)} – ${fmtDate(lastDay)}`;
+  }
+
+  if (!end) return `${fmtDate(start)} ${fmtTime(start)}`;
+  if (start.toDateString() === end.toDateString()) {
+    return `${fmtDate(start)}, ${fmtTime(start)} – ${fmtTime(end)}`;
+  }
+  return `${fmtDate(start)} ${fmtTime(start)} – ${fmtDate(end)} ${fmtTime(end)}`;
+}
+
 function openEventModal(event) {
   currentEventId = event.id;
   modalTitle.textContent = event.title;
-  modalDate.textContent = formatDate(event.startStr);
+  modalDate.textContent = formatRange(event);
   modalDesc.textContent = event.extendedProps.popis || "Bez popisu.";
   modalAuthor.textContent = event.extendedProps.autor || "neznámy";
 
@@ -72,11 +121,6 @@ function openEventModal(event) {
   modalDeleteBtn.hidden = !isOwner;
 
   eventModal.show();
-}
-
-function formatDate(iso) {
-  const [y, m, d] = iso.split('-');
-  return `${d}.${m}.${y}`;
 }
 
 modalDeleteBtn.addEventListener('click', async () => {
@@ -109,7 +153,9 @@ onSnapshot(collection(db, "udalosti"), (snapshot) => {
     calendar.addEvent({
       id: docSnap.id,
       title: data.nazov,
-      start: data.datum,
+      start: data.zaciatok || data.datum,   // staré udalosti majú len "datum"
+      end: data.koniec || undefined,
+      allDay: data.cely_den ?? true,
       extendedProps: {
         popis: data.popis,
         autor: data.autor_email
@@ -158,26 +204,44 @@ onAuthStateChanged(auth, (user) => {
 // --- Pridávanie novej udalosti ---
 addEventBtn.addEventListener('click', async () => {
   const nameInput = document.getElementById('eventName').value.trim();
-  const dateInput = document.getElementById('eventDate').value;
   const descInput = document.getElementById('eventDesc').value.trim();
+  const startVal = startInput.value;
+  const endVal = endInput.value;
+  const isAllDay = allDayCb.checked;
   const currentUser = auth.currentUser;
 
-  if (!nameInput || !dateInput) {
-    alert("Prosím, vyplň názov aj dátum udalosti.");
+  if (!nameInput || !startVal) {
+    alert("Prosím, vyplň názov aj začiatok udalosti.");
     return;
+  }
+  if (endVal && endVal < startVal) {
+    alert("Koniec nemôže byť skôr ako začiatok.");
+    return;
+  }
+
+  let endToSave = endVal || null;
+  if (isAllDay && endVal) {
+    // FullCalendar očakáva pri celodennej udalosti koniec exkluzívny → +1 deň
+    // (počítame v UTC, aby sa deň neposunul kvôli časovému pásmu)
+    const d = new Date(endVal + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + 1);
+    endToSave = d.toISOString().slice(0, 10);
   }
 
   try {
     await addDoc(collection(db, "udalosti"), {
       nazov: nameInput,
-      datum: dateInput,
+      zaciatok: startVal,
+      koniec: endToSave,
+      cely_den: isAllDay,
       popis: descInput,
       autor_email: norm(currentUser.email),
       cas_pridania: new Date()
     });
 
     document.getElementById('eventName').value = "";
-    document.getElementById('eventDate').value = "";
+    startInput.value = "";
+    endInput.value = "";
     document.getElementById('eventDesc').value = "";
   } catch (error) {
     console.error("Chyba pri ukladaní:", error.code, error.message);
