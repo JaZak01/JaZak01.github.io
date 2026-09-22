@@ -29,20 +29,21 @@ const statusText = document.getElementById('status');
 const addEventBtn = document.getElementById('addEventBtn');
 const authError = document.getElementById('authError');
 
-const modalOverlay = document.getElementById('modalOverlay');
-const modalClose = document.getElementById('modalClose');
 const modalTitle = document.getElementById('modalTitle');
 const modalDate = document.getElementById('modalDate');
 const modalDesc = document.getElementById('modalDesc');
 const modalAuthor = document.getElementById('modalAuthor');
 const modalDeleteBtn = document.getElementById('modalDeleteBtn');
 
-// Pomôcka: emaily vždy porovnávame v malých písmenách,
-// nech prihlásenie/registrácia s odlišnou veľkosťou písmen nespôsobí,
-// že si autor sám nevie zmazať svoju udalosť.
+// Bootstrap modal instance
+const eventModalEl = document.getElementById('eventModal');
+const eventModal = new bootstrap.Modal(eventModalEl);
+
+// Emaily vždy porovnávame v malých písmenách, nech prihlásenie/registrácia
+// s odlišnou veľkosťou písmen nespôsobí, že si autor sám nevie zmazať udalosť.
 const norm = (email) => (email || "").trim().toLowerCase();
 
-let currentEventId = null; // id udalosti aktuálne otvorenej v detaile
+let currentEventId = null;
 
 // --- Kalendár ---
 const calendarEl = document.getElementById('calendar');
@@ -70,23 +71,13 @@ function openEventModal(event) {
   const isOwner = currentUser && norm(currentUser.email) === norm(event.extendedProps.autor);
   modalDeleteBtn.hidden = !isOwner;
 
-  modalOverlay.hidden = false;
-}
-
-function closeModal() {
-  modalOverlay.hidden = true;
-  currentEventId = null;
+  eventModal.show();
 }
 
 function formatDate(iso) {
   const [y, m, d] = iso.split('-');
   return `${d}.${m}.${y}`;
 }
-
-modalClose.addEventListener('click', closeModal);
-modalOverlay.addEventListener('click', (e) => {
-  if (e.target === modalOverlay) closeModal();
-});
 
 modalDeleteBtn.addEventListener('click', async () => {
   if (!currentEventId) return;
@@ -95,15 +86,19 @@ modalDeleteBtn.addEventListener('click', async () => {
   modalDeleteBtn.disabled = true;
   try {
     await deleteDoc(doc(db, "udalosti", currentEventId));
-    closeModal();
+    eventModal.hide();
   } catch (error) {
-    // Vypíš presnú chybu do konzoly, nech vieš presne, čo Firebase odmietol
     console.error("Chyba pri mazaní:", error.code, error.message);
     alert("Zmazanie zlyhalo (" + error.code + "). Over si Firestore pravidlá — " +
-          "e-mail prihláseného používateľa sa musí zhodovať s e-mailom autora udalosti.");
+        "e-mail prihláseného používateľa sa musí zhodovať s e-mailom autora udalosti.");
   } finally {
     modalDeleteBtn.disabled = false;
   }
+});
+
+// Vyčistenie stavu po zatvorení modálu (kliknutím mimo, na X, na Escape...)
+eventModalEl.addEventListener('hidden.bs.modal', () => {
+  currentEventId = null;
 });
 
 // --- Synchronizácia udalostí z Firestore v reálnom čase ---
@@ -127,13 +122,13 @@ onSnapshot(collection(db, "udalosti"), (snapshot) => {
 document.getElementById('registerBtn').addEventListener('click', () => {
   clearAuthError();
   createUserWithEmailAndPassword(auth, document.getElementById('email').value.trim(), document.getElementById('password').value)
-    .catch(showAuthError);
+      .catch(showAuthError);
 });
 
 document.getElementById('loginBtn').addEventListener('click', () => {
   clearAuthError();
   signInWithEmailAndPassword(auth, document.getElementById('email').value.trim(), document.getElementById('password').value)
-    .catch(showAuthError);
+      .catch(showAuthError);
 });
 
 logoutBtn.addEventListener('click', () => signOut(auth));
@@ -177,7 +172,6 @@ addEventBtn.addEventListener('click', async () => {
       nazov: nameInput,
       datum: dateInput,
       popis: descInput,
-      // Ukladáme e-mail v malých písmenách, nech sedí s porovnaním pri mazaní
       autor_email: norm(currentUser.email),
       cas_pridania: new Date()
     });
