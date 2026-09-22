@@ -116,3 +116,9 @@ body {
     font-size: .7rem;
   }
 }
+
+.fc-daygrid-day-number,
+.fc-col-header-cell-cushion {
+  text-decoration: none !important;
+  color: inherit;
+}

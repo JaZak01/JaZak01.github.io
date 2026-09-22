@@ -42,7 +42,6 @@ const showLoginBtn = document.getElementById('showLoginBtn');
 const showRegisterBtn = document.getElementById('showRegisterBtn');
 
 // Polia formulára pre čas
-const allDayCb = document.getElementById('allDay');
 const startInput = document.getElementById('eventStart');
 const endInput = document.getElementById('eventEnd');
 
@@ -54,17 +53,6 @@ const eventModal = new bootstrap.Modal(eventModalEl);
 const norm = (email) => (email || "").trim().toLowerCase();
 
 let currentEventId = null;
-
-// --- Prepínač "Celý deň" ---
-allDayCb.addEventListener('change', () => {
-  const s = startInput.value.slice(0, 10);
-  const e = endInput.value.slice(0, 10);
-  const type = allDayCb.checked ? 'date' : 'datetime-local';
-  startInput.type = type;
-  endInput.type = type;
-  startInput.value = allDayCb.checked ? s : (s ? s + "T09:00" : "");
-  endInput.value = allDayCb.checked ? e : (e ? e + "T10:00" : "");
-});
 
 // --- Kalendár ---
 const calendarEl = document.getElementById('calendar');
@@ -98,14 +86,6 @@ function formatRange(event) {
 
   const start = event.start;
   const end = event.end;
-
-  if (event.allDay) {
-    if (!end) return fmtDate(start);
-    const lastDay = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1);
-    return lastDay.toDateString() === start.toDateString()
-        ? fmtDate(start)
-        : `${fmtDate(start)} – ${fmtDate(lastDay)}`;
-  }
 
   if (!end) return `${fmtDate(start)} ${fmtTime(start)}`;
   if (start.toDateString() === end.toDateString()) {
@@ -160,7 +140,6 @@ onSnapshot(collection(db, "udalosti"), (snapshot) => {
       title: data.nazov,
       start: data.zaciatok || data.datum,
       end: data.koniec || undefined,
-      allDay: data.cely_den ?? true,
       extendedProps: {
         popis: data.popis,
         autor: data.autor_meno || data.autor_email, // Meno na zobrazenie
@@ -245,7 +224,6 @@ addEventBtn.addEventListener('click', async () => {
   const descInput = document.getElementById('eventDesc').value.trim();
   const startVal = startInput.value;
   const endVal = endInput.value;
-  const isAllDay = allDayCb.checked;
   const currentUser = auth.currentUser;
 
   if (!nameInput || !startVal) {
@@ -257,19 +235,11 @@ addEventBtn.addEventListener('click', async () => {
     return;
   }
 
-  let endToSave = endVal || null;
-  if (isAllDay && endVal) {
-    const d = new Date(endVal + "T00:00:00Z");
-    d.setUTCDate(d.getUTCDate() + 1);
-    endToSave = d.toISOString().slice(0, 10);
-  }
-
   try {
     await addDoc(collection(db, "udalosti"), {
       nazov: nameInput,
       zaciatok: startVal,
-      koniec: endToSave,
-      cely_den: isAllDay,
+      koniec: endVal || null,
       popis: descInput,
       autor_email: norm(currentUser.email),
       autor_meno: currentUser.displayName || "Neznámy", // Uloženie používateľského mena do databázy
