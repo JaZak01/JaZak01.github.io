@@ -169,7 +169,17 @@ onSnapshot(collection(db, "udalosti"), (snapshot) => {
 // --- Autentifikácia ---
 document.getElementById('registerBtn').addEventListener('click', () => {
   clearAuthError();
-  createUserWithEmailAndPassword(auth, document.getElementById('email').value.trim(), document.getElementById('password').value)
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const passwordConfirm = document.getElementById('passwordConfirm').value;
+
+  // Kontrola zhody hesiel
+  if (password !== passwordConfirm) {
+    showAuthError({ message: "Heslá sa nezhodujú! Skús to znova." });
+    return;
+  }
+
+  createUserWithEmailAndPassword(auth, email, password)
       .catch(showAuthError);
 });
 
