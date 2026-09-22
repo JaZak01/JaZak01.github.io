@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
   getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  onAuthStateChanged, signOut
+  onAuthStateChanged, signOut, updateProfile
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
   getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc
@@ -35,6 +35,12 @@ const modalDesc = document.getElementById('modalDesc');
 const modalAuthor = document.getElementById('modalAuthor');
 const modalDeleteBtn = document.getElementById('modalDeleteBtn');
 
+// UI prepínanie pre prihlásenie/registráciu
+const loginForm = document.getElementById('loginForm');
+const registerForm = document.getElementById('registerForm');
+const showLoginBtn = document.getElementById('showLoginBtn');
+const showRegisterBtn = document.getElementById('showRegisterBtn');
+
 // Polia formulára pre čas
 const allDayCb = document.getElementById('allDay');
 const startInput = document.getElementById('eventStart');
@@ -44,15 +50,13 @@ const endInput = document.getElementById('eventEnd');
 const eventModalEl = document.getElementById('eventModal');
 const eventModal = new bootstrap.Modal(eventModalEl);
 
-// Emaily vždy porovnávame v malých písmenách, nech prihlásenie/registrácia
-// s odlišnou veľkosťou písmen nespôsobí, že si autor sám nevie zmazať udalosť.
+// Emaily vždy porovnávame v malých písmenách
 const norm = (email) => (email || "").trim().toLowerCase();
 
 let currentEventId = null;
 
 // --- Prepínač "Celý deň" ---
 allDayCb.addEventListener('change', () => {
-  // pri zmene typu inputu sa hodnota vymaže, preto si zachováme dátumovú časť
   const s = startInput.value.slice(0, 10);
   const e = endInput.value.slice(0, 10);
   const type = allDayCb.checked ? 'date' : 'datetime-local';
@@ -97,7 +101,6 @@ function formatRange(event) {
 
   if (event.allDay) {
     if (!end) return fmtDate(start);
-    // FullCalendar má pri celodenných udalostiach koniec exkluzívny (+1 deň)
     const lastDay = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1);
     return lastDay.toDateString() === start.toDateString()
         ? fmtDate(start)
@@ -116,10 +119,12 @@ function openEventModal(event) {
   modalTitle.textContent = event.title;
   modalDate.textContent = formatRange(event);
   modalDesc.textContent = event.extendedProps.popis || "Bez popisu.";
+  // Zobrazujeme meno autora (alebo e-mail pri starých udalostiach)
   modalAuthor.textContent = event.extendedProps.autor || "neznámy";
 
   const currentUser = auth.currentUser;
-  const isOwner = currentUser && norm(currentUser.email) === norm(event.extendedProps.autor);
+  // Overenie vlastníctva udalosti cez skrytý autor_email
+  const isOwner = currentUser && norm(currentUser.email) === norm(event.extendedProps.autor_email);
   modalDeleteBtn.hidden = !isOwner;
 
   eventModal.show();
@@ -135,14 +140,12 @@ modalDeleteBtn.addEventListener('click', async () => {
     eventModal.hide();
   } catch (error) {
     console.error("Chyba pri mazaní:", error.code, error.message);
-    alert("Zmazanie zlyhalo (" + error.code + "). Over si Firestore pravidlá — " +
-        "e-mail prihláseného používateľa sa musí zhodovať s e-mailom autora udalosti.");
+    alert("Zmazanie zlyhalo (" + error.code + "). Over si Firestore pravidlá — e-mail prihláseného používateľa sa musí zhodovať s e-mailom autora udalosti.");
   } finally {
     modalDeleteBtn.disabled = false;
   }
 });
 
-// Vyčistenie stavu po zatvorení modálu (kliknutím mimo, na X, na Escape...)
 eventModalEl.addEventListener('hidden.bs.modal', () => {
   currentEventId = null;
 });
@@ -155,38 +158,60 @@ onSnapshot(collection(db, "udalosti"), (snapshot) => {
     calendar.addEvent({
       id: docSnap.id,
       title: data.nazov,
-      start: data.zaciatok || data.datum,   // staré udalosti majú len "datum"
+      start: data.zaciatok || data.datum,
       end: data.koniec || undefined,
       allDay: data.cely_den ?? true,
       extendedProps: {
         popis: data.popis,
-        autor: data.autor_email
+        autor: data.autor_meno || data.autor_email, // Meno na zobrazenie
+        autor_email: data.autor_email // E-mail na overenie práv mazania
       }
     });
   });
 });
 
-// --- Autentifikácia ---
-document.getElementById('registerBtn').addEventListener('click', () => {
+// --- Autentifikácia: UI Prepínanie ---
+showLoginBtn.addEventListener('click', () => {
+  loginForm.hidden = false;
+  registerForm.hidden = true;
+  showLoginBtn.className = "btn btn-sm btn-primary";
+  showRegisterBtn.className = "btn btn-sm btn-outline-primary";
   clearAuthError();
-  const email = document.getElementById('email').value.trim();
-  const password = document.getElementById('password').value;
-  const passwordConfirm = document.getElementById('passwordConfirm').value;
+});
 
-  // Kontrola zhody hesiel
-  if (password !== passwordConfirm) {
-    showAuthError({ message: "Heslá sa nezhodujú! Skús to znova." });
-    return;
+showRegisterBtn.addEventListener('click', () => {
+  loginForm.hidden = true;
+  registerForm.hidden = false;
+  showLoginBtn.className = "btn btn-sm btn-outline-primary";
+  showRegisterBtn.className = "btn btn-sm btn-primary";
+  clearAuthError();
+});
+
+// --- Autentifikácia: Logika ---
+document.getElementById('registerBtn').addEventListener('click', async () => {
+  clearAuthError();
+  const name = document.getElementById('regUsername').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const password = document.getElementById('regPassword').value;
+  const passwordConfirm = document.getElementById('regPasswordConfirm').value;
+
+  if (!name) return showAuthError({ message: "Zadaj prosím používateľské meno." });
+  if (password !== passwordConfirm) return showAuthError({ message: "Heslá sa nezhodujú! Skús to znova." });
+
+  try {
+    const userCreds = await createUserWithEmailAndPassword(auth, email, password);
+    await updateProfile(userCreds.user, { displayName: name });
+    statusText.textContent = "Prihlásený: " + name;
+  } catch (error) {
+    showAuthError(error);
   }
-
-  createUserWithEmailAndPassword(auth, email, password)
-      .catch(showAuthError);
 });
 
 document.getElementById('loginBtn').addEventListener('click', () => {
   clearAuthError();
-  signInWithEmailAndPassword(auth, document.getElementById('email').value.trim(), document.getElementById('password').value)
-      .catch(showAuthError);
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  signInWithEmailAndPassword(auth, email, password).catch(showAuthError);
 });
 
 logoutBtn.addEventListener('click', () => signOut(auth));
@@ -201,7 +226,8 @@ function clearAuthError() {
 
 onAuthStateChanged(auth, (user) => {
   if (user) {
-    statusText.textContent = "Prihlásený: " + user.email;
+    const displayName = user.displayName || user.email;
+    statusText.textContent = "Prihlásený: " + displayName;
     authSection.hidden = true;
     logoutBtn.hidden = false;
     eventForm.hidden = false;
@@ -233,8 +259,6 @@ addEventBtn.addEventListener('click', async () => {
 
   let endToSave = endVal || null;
   if (isAllDay && endVal) {
-    // FullCalendar očakáva pri celodennej udalosti koniec exkluzívny → +1 deň
-    // (počítame v UTC, aby sa deň neposunul kvôli časovému pásmu)
     const d = new Date(endVal + "T00:00:00Z");
     d.setUTCDate(d.getUTCDate() + 1);
     endToSave = d.toISOString().slice(0, 10);
@@ -248,6 +272,7 @@ addEventBtn.addEventListener('click', async () => {
       cely_den: isAllDay,
       popis: descInput,
       autor_email: norm(currentUser.email),
+      autor_meno: currentUser.displayName || "Neznámy", // Uloženie používateľského mena do databázy
       cas_pridania: new Date()
     });
 
