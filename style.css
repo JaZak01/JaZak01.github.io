@@ -47,6 +47,76 @@ body {
   opacity: .5;
 }
 
+/* Čísla dní a hlavička dní bez podčiarknutia */
+.fc-daygrid-day-number,
+.fc-col-header-cell-cushion {
+  text-decoration: none !important;
+  color: inherit;
+}
+
+/* ---------- Tag picker (formulár) ---------- */
+#tagPicker .btn-check + label {
+  border-radius: 999px;
+}
+
+.tag-picker-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tag-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* Keď je tag zaškrtnutý, orámovanie a text sa sfarbí podľa jeho farby */
+#tagPicker .btn-check:checked + .tag-picker-label {
+  background: var(--tag-color);
+  border-color: var(--tag-color);
+  color: #fff;
+}
+
+/* ---------- Tag odznaky v detail-modali ---------- */
+.tag-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 600;
+  color: #fff;
+  margin-right: 4px;
+  margin-bottom: 4px;
+}
+
+/* ---------- Tag bodky v riadku udalosti v kalendári ---------- */
+.fc-event-main-custom {
+  padding: 1px 2px;
+}
+
+.fc-event-title-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.fc-event-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fc-tag-dot {
+  width: 6px;
+  height: 6px;
+  min-width: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
 /* ---------- Mobil ---------- */
 @media (max-width: 575.98px) {
   .container {
@@ -115,10 +185,4 @@ body {
   .fc .fc-timegrid-slot-label-cushion {
     font-size: .7rem;
   }
-}
-
-.fc-daygrid-day-number,
-.fc-col-header-cell-cushion {
-  text-decoration: none !important;
-  color: inherit;
 }

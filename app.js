@@ -7,7 +7,6 @@ import {
   getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-// 🔴 TVOJA FIREBASE KONFIGURÁCIA
 const firebaseConfig = {
   apiKey: "AIzaSyAW1Fo3qiyJit9xUVKj4NxIF7YminZsncU",
   authDomain: "kalendar-edf3f.firebaseapp.com",
@@ -21,7 +20,16 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// --- UI elementy ---
+const TAGS = [
+  { id: 'sport',     label: 'Šport',      color: '#0d6efd' },
+  { id: 'kultura',   label: 'Kultúra',    color: '#6f42c1' },
+  { id: 'jedlo',     label: 'Jedlo',      color: '#fd7e14' },
+  { id: 'deti',      label: 'Deti',       color: '#20c997' },
+  { id: 'brigada',   label: 'Brigáda',    color: '#dc3545' },
+  { id: 'stretnutie',label: 'Stretnutie', color: '#6c757d' },
+];
+const TAG_MAP = Object.fromEntries(TAGS.map(t => [t.id, t]));
+
 const authSection = document.getElementById('authSection');
 const eventForm = document.getElementById('eventForm');
 const logoutBtn = document.getElementById('logoutBtn');
@@ -32,18 +40,37 @@ const authError = document.getElementById('authError');
 const modalTitle = document.getElementById('modalTitle');
 const modalDate = document.getElementById('modalDate');
 const modalDesc = document.getElementById('modalDesc');
+const modalTags = document.getElementById('modalTags');
 const modalAuthor = document.getElementById('modalAuthor');
 const modalDeleteBtn = document.getElementById('modalDeleteBtn');
 
-// UI prepínanie pre prihlásenie/registráciu
 const loginForm = document.getElementById('loginForm');
 const registerForm = document.getElementById('registerForm');
 const showLoginBtn = document.getElementById('showLoginBtn');
 const showRegisterBtn = document.getElementById('showRegisterBtn');
 
-// Polia formulára pre čas
 const startInput = document.getElementById('eventStart');
 const endInput = document.getElementById('eventEnd');
+
+const tagPicker = document.getElementById('tagPicker');
+renderTagPicker();
+
+function renderTagPicker() {
+  tagPicker.innerHTML = TAGS.map(tag => `
+    <input type="checkbox" class="btn-check" id="tag-${tag.id}" autocomplete="off">
+    <label class="btn btn-outline-secondary btn-sm tag-picker-label" style="--tag-color: ${tag.color}" for="tag-${tag.id}">
+      <span class="tag-dot" style="background:${tag.color}"></span>${tag.label}
+    </label>
+  `).join('');
+}
+
+function getSelectedTags() {
+  return TAGS.filter(tag => document.getElementById(`tag-${tag.id}`).checked).map(tag => tag.id);
+}
+
+function resetTagPicker() {
+  TAGS.forEach(tag => { document.getElementById(`tag-${tag.id}`).checked = false; });
+}
 
 // Bootstrap modal instance
 const eventModalEl = document.getElementById('eventModal');
@@ -62,6 +89,12 @@ const toolbarFor = () => isMobile()
     ? { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listMonth' }
     : { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listMonth' };
 
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str ?? '';
+  return div.innerHTML;
+}
+
 const calendar = new FullCalendar.Calendar(calendarEl, {
   initialView: 'dayGridMonth',
   locale: 'sk',
@@ -74,6 +107,18 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
   windowResize: () => calendar.setOption('headerToolbar', toolbarFor()),
   eventClick: function (info) {
     openEventModal(info.event);
+  },
+  eventContent: function (arg) {
+    const tags = arg.event.extendedProps.tagy || [];
+    const dots = tags
+        .map(id => TAG_MAP[id])
+        .filter(Boolean)
+        .map(tag => `<span class="fc-tag-dot" style="background:${tag.color}"></span>`)
+        .join('');
+    const timeHtml = arg.timeText ? `<div class="fc-event-time">${escapeHtml(arg.timeText)}</div>` : '';
+    return {
+      html: `<div class="fc-event-main-custom">${timeHtml}<div class="fc-event-title-row">${dots}<span class="fc-event-title">${escapeHtml(arg.event.title)}</span></div></div>`
+    };
   }
 });
 calendar.render();
@@ -99,6 +144,15 @@ function openEventModal(event) {
   modalTitle.textContent = event.title;
   modalDate.textContent = formatRange(event);
   modalDesc.textContent = event.extendedProps.popis || "Bez popisu.";
+
+  // Zobrazenie tagov ako farebné odznaky
+  const eventTags = event.extendedProps.tagy || [];
+  modalTags.innerHTML = eventTags
+      .map(id => TAG_MAP[id])
+      .filter(Boolean)
+      .map(tag => `<span class="tag-badge" style="background:${tag.color}">${tag.label}</span>`)
+      .join('');
+
   // Zobrazujeme meno autora (alebo e-mail pri starých udalostiach)
   modalAuthor.textContent = event.extendedProps.autor || "neznámy";
 
@@ -142,6 +196,7 @@ onSnapshot(collection(db, "udalosti"), (snapshot) => {
       end: data.koniec || undefined,
       extendedProps: {
         popis: data.popis,
+        tagy: data.tagy || [],
         autor: data.autor_meno || data.autor_email, // Meno na zobrazenie
         autor_email: data.autor_email // E-mail na overenie práv mazania
       }
@@ -224,6 +279,7 @@ addEventBtn.addEventListener('click', async () => {
   const descInput = document.getElementById('eventDesc').value.trim();
   const startVal = startInput.value;
   const endVal = endInput.value;
+  const selectedTags = getSelectedTags();
   const currentUser = auth.currentUser;
 
   if (!nameInput || !startVal) {
@@ -241,6 +297,7 @@ addEventBtn.addEventListener('click', async () => {
       zaciatok: startVal,
       koniec: endVal || null,
       popis: descInput,
+      tagy: selectedTags,
       autor_email: norm(currentUser.email),
       autor_meno: currentUser.displayName || "Neznámy", // Uloženie používateľského mena do databázy
       cas_pridania: new Date()
@@ -250,6 +307,7 @@ addEventBtn.addEventListener('click', async () => {
     startInput.value = "";
     endInput.value = "";
     document.getElementById('eventDesc').value = "";
+    resetTagPicker();
   } catch (error) {
     console.error("Chyba pri ukladaní:", error.code, error.message);
     alert("Chyba pri ukladaní: " + error.message);
